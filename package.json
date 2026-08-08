@@ -1,0 +1,20 @@
+{
+  "name": "openai-real-api-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Application using the OpenAI Responses API and gpt-image-2 image generation. No mock data.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node --loader ts-node/esm src/index.ts",
+    "audit": "node audit/check.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "openai": "^4.104.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  }
+}
