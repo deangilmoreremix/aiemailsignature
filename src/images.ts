@@ -18,6 +18,7 @@ export interface ImageGenOptions {
   background?: ImageBackground;
   moderation?: Moderation;
   n?: number;
+  user?: string;
 }
 
 export interface GeneratedImage {
@@ -39,7 +40,7 @@ export function decodeImage(img: GeneratedImage): Buffer {
 export async function generateImage(
   prompt: string,
   options: ImageGenOptions = {}
-): Promise<GeneratedImage> {
+): Promise<GeneratedImage[]> {
   const result = await openai.images.generate({
     model: IMAGE_MODEL,
     prompt,
@@ -52,13 +53,13 @@ export async function generateImage(
     n: options.n ?? 1,
   });
 
-  const item = result.data?.[0];
-  if (!item) throw new Error("Image generation returned no data from the API.");
-  return {
+  if (!result.data?.length)
+    throw new Error("Image generation returned no data from the API.");
+  return result.data.map((item) => ({
     b64Json: item.b64_json,
     url: item.url,
     revisedPrompt: item.revised_prompt,
-  };
+  }));
 }
 
 /**
@@ -70,7 +71,7 @@ export async function generateImageStream(
   prompt: string,
   handlers: {
     onPartial?: (b64: string, index: number) => void;
-    onFinal?: (img: GeneratedImage) => void;
+    onFinal?: (img: GeneratedImage[]) => void;
   },
   options: ImageGenOptions & { partialImages?: number } = {}
 ): Promise<void> {
@@ -115,7 +116,7 @@ export async function editImage(
   prompt: string,
   image: ImageUpload | ImageUpload[],
   options: ImageGenOptions = {}
-): Promise<GeneratedImage> {
+): Promise<GeneratedImage[]> {
   const result = await openai.images.edit({
     model: IMAGE_MODEL,
     prompt,
@@ -129,13 +130,13 @@ export async function editImage(
     n: options.n ?? 1,
   } as OpenAI.ImageEditParams);
 
-  const item = result.data?.[0];
-  if (!item) throw new Error("Image edit returned no data from the API.");
-  return {
+  if (!result.data?.length)
+    throw new Error("Image edit returned no data from the API.");
+  return result.data.map((item) => ({
     b64Json: item.b64_json,
     url: item.url,
     revisedPrompt: item.revised_prompt,
-  };
+  }));
 }
 
 /**
@@ -148,7 +149,7 @@ export async function inpaintImage(
   image: ImageUpload,
   mask: ImageUpload,
   options: ImageGenOptions = {}
-): Promise<GeneratedImage> {
+): Promise<GeneratedImage[]> {
   const result = await openai.images.edit({
     model: IMAGE_MODEL,
     prompt,
@@ -162,11 +163,73 @@ export async function inpaintImage(
     moderation: options.moderation ?? "auto",
   } as OpenAI.ImageEditParams);
 
-  const item = result.data?.[0];
-  if (!item) throw new Error("Image inpaint returned no data from the API.");
-  return {
+  if (!result.data?.length)
+    throw new Error("Image inpaint returned no data from the API.");
+  return result.data.map((item) => ({
     b64Json: item.b64_json,
     url: item.url,
     revisedPrompt: item.revised_prompt,
-  };
+  }));
+}
+
+/**
+ * gpt-image-2 (v2 Image API) — Batch generation.
+ * Builds a JSONL request file, uploads it, and creates a batch against
+ * `/v1/images/generations` (a supported gpt-image-2 endpoint). Returns the
+ * created Batch so you can poll for completion.
+ */
+export async function generateImagesBatch(
+  prompts: string[],
+  options: ImageGenOptions = {}
+): Promise<OpenAI.Batch> {
+  const jsonl = prompts
+    .map((prompt, i) => ({
+      custom_id: `img-${i}`,
+      method: "POST",
+      url: "/v1/images/generations",
+      body: {
+        model: IMAGE_MODEL,
+        prompt,
+        size: options.size ?? "auto",
+        quality: options.quality ?? "auto",
+        output_format: options.outputFormat ?? "png",
+        output_compression: options.outputCompression,
+        background: options.background,
+        moderation: options.moderation ?? "auto",
+        n: options.n ?? 1,
+      },
+    }))
+    .map((line) => JSON.stringify(line))
+    .join("\n");
+
+  const file = await openai.files.create({
+    file: new File([jsonl], "image-batch.jsonl", { type: "application/jsonl" }),
+    purpose: "batch",
+  });
+
+  // The SDK's BatchCreateParams.endpoint type lags gpt-image-2; the runtime
+  // supports /v1/images/generations for batch image jobs.
+  return openai.batches.create({
+    endpoint: "/v1/images/generations",
+    input_file_id: file.id,
+    completion_window: "24h",
+  } as unknown as OpenAI.BatchCreateParams);
+}
+
+/** Retrieve the current state of a batch job. */
+export async function getBatch(batchId: string): Promise<OpenAI.Batch> {
+  return openai.batches.retrieve(batchId);
+}
+
+/** Poll a batch until it completes or fails, then return it. */
+export async function waitForBatch(
+  batchId: string,
+  pollMs = 10_000
+): Promise<OpenAI.Batch> {
+  for (;;) {
+    const batch = await openai.batches.retrieve(batchId);
+    if (batch.status === "completed" || batch.status === "failed" || batch.status === "expired")
+      return batch;
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
 }

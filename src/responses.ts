@@ -215,23 +215,29 @@ export async function runWithFunctions(
 }
 
 /** An image supplied to the model as input. */
+/** Vision detail level for image inputs (Responses API + Chat Completions). */
+export type ImageDetail = "low" | "high" | "original" | "auto";
+
 export type ImageInput =
-  | { url: string }
-  | { base64: string; mediaType?: string }
-  | { fileId: string };
+  | { url: string; detail?: ImageDetail }
+  | { base64: string; mediaType?: string; detail?: ImageDetail }
+  | { fileId: string; detail?: ImageDetail };
 
 function toInputImage(img: ImageInput): OpenAI.Responses.ResponseInputImage {
+  const detail = (img.detail ?? "auto") as OpenAI.Responses.ResponseInputImage["detail"];
   if ("url" in img)
-    return { type: "input_image", image_url: img.url, detail: "auto" };
+    return { type: "input_image", image_url: img.url, detail };
   if ("fileId" in img)
-    return { type: "input_image", file_id: img.fileId, detail: "auto" };
+    return { type: "input_image", file_id: img.fileId, detail };
   const dataUrl = `data:${img.mediaType ?? "image/png"};base64,${img.base64}`;
-  return { type: "input_image", image_url: dataUrl, detail: "auto" };
+  return { type: "input_image", image_url: dataUrl, detail };
 }
 
 /**
  * Responses API — multimodal input (text + one or more images).
- * Lets the model reason about images you provide via URL, base64, or file ID.
+ * Lets the model reason about images (vision) via URL, base64, or file ID.
+ * Use `detail` to control fidelity: "original" preserves dimensions for OCR/
+ * spatial tasks; "low" is cheaper/faster; "auto" lets the model decide.
  */
 export async function createResponseWithImage(
   text: string,
@@ -253,4 +259,26 @@ export async function createResponseWithImage(
   });
 
   return { text: collectText(response), responseId: response.id, usage: response.usage };
+}
+
+/**
+ * Convenience wrapper: ask the model a question about one or more images.
+ */
+export async function analyzeImage(
+  question: string,
+  images: ImageInput | ImageInput[],
+  options: BaseResponseOptions = {}
+): Promise<string> {
+  const res = await createResponseWithImage(question, images, options);
+  return res.text;
+}
+
+/** Upload an image to the Files API (purpose: vision) and return its file ID. */
+export async function uploadVisionImage(
+  source: File | Blob | Buffer,
+  filename = "vision.png"
+): Promise<string> {
+  const file = new File([source as BlobPart], filename, { type: "image/png" });
+  const uploaded = await openai.files.create({ file, purpose: "vision" });
+  return uploaded.id;
 }

@@ -6,6 +6,8 @@ import {
   createStructuredResponse,
   runWithFunctions,
   createResponseWithImage,
+  analyzeImage,
+  uploadVisionImage,
 } from "./responses.js";
 import {
   generateImage,
@@ -14,6 +16,13 @@ import {
   inpaintImage,
   decodeImage,
 } from "./images.js";
+import {
+  generateImageViaResponses,
+  editImageViaResponses,
+  streamImageViaResponses,
+  runImageStudio,
+  analyzeThenGenerate,
+} from "./conversation.js";
 
 type Cmd = string | undefined;
 
@@ -81,23 +90,77 @@ async function main() {
     }
     case "image": {
       const img = await generateImage("A serene mountain lake at sunrise, photorealistic.");
-      if (img.b64Json) writeFileSync("out.png", decodeImage(img));
-      console.log("IMAGE saved:", img.b64Json ? "out.png" : img.url);
+      if (img[0]?.b64Json) writeFileSync("out.png", decodeImage(img[0]));
+      console.log("IMAGE saved:", img[0]?.b64Json ? "out.png" : img[0]?.url);
       break;
     }
     case "image-stream": {
       await generateImageStream("A fox wearing a scarf in the snow.", {
         onPartial: (b64, i) => writeFileSync(`partial-${i}.png`, Buffer.from(b64, "base64")),
-        onFinal: (img) => {
-          if (img.b64Json) writeFileSync("final.png", decodeImage(img));
+        onFinal: (imgs) => {
+          if (imgs[0]) writeFileSync("final.png", decodeImage(imgs[0]));
         },
       });
       console.log("STREAMED images written.");
       break;
     }
+    case "resp-image": {
+      const imgs = await generateImageViaResponses("A watercolor painting of a lighthouse on a cliff.");
+      if (imgs[0]) writeFileSync("resp-image.png", Buffer.from(imgs[0].b64Json, "base64"));
+      console.log("RESPONSES-API image written:", imgs.length);
+      break;
+    }
+    case "resp-image-edit": {
+      const [_, id, prompt] = process.argv.slice(2);
+      const imgs = await editImageViaResponses(prompt ?? "Make it nighttime.", id);
+      if (imgs[0]) writeFileSync("resp-image-edit.png", Buffer.from(imgs[0].b64Json, "base64"));
+      console.log("RESPONSES-API edited image written:", imgs.length);
+      break;
+    }
+    case "resp-image-stream": {
+      await streamImageViaResponses("A dragon curled around a glowing crystal.", {
+        onPartial: (b64, i) => writeFileSync(`resp-partial-${i}.png`, Buffer.from(b64, "base64")),
+        onDone: (imgs) => {
+          if (imgs[0]) writeFileSync("resp-final.png", Buffer.from(imgs[0].b64Json, "base64"));
+        },
+      });
+      console.log("RESPONSES-API streamed images written.");
+      break;
+    }
+    case "studio": {
+      const res = await runImageStudio(
+        "Generate an image of a cozy reading nook, then make it look like a sci-fi spaceship lounge."
+      );
+      console.log("STUDIO FINAL TEXT:", res.text);
+      break;
+    }
+    case "vision": {
+      const answer = await analyzeImage(
+        "What is in this image? Be specific.",
+        { url: "https://api.nga.gov/iiif/a2e6da57-3cd1-4235-b20e-95dcaefed6c8/full/!800,800/0/default.jpg", detail: "high" }
+      );
+      console.log("VISION:", answer);
+      break;
+    }
+    case "vision-generate": {
+      const { description, image } = await analyzeThenGenerate(
+        { url: "https://api.nga.gov/iiif/a2e6da57-3cd1-4235-b20e-95dcaefed6c8/full/!800,800/0/default.jpg", detail: "high" },
+        "Describe this artwork in one sentence."
+      );
+      if (image[0]?.b64Json)
+        writeFileSync("vision-generated.png", Buffer.from(image[0].b64Json, "base64"));
+      console.log("DESCRIPTION:", description, "\nGENERATED:", image.length, "image(s)");
+      break;
+    }
+    case "upload-vision": {
+      const [_, path] = process.argv.slice(2);
+      const id = await uploadVisionImage(await import("node:fs").then((m) => m.readFileSync(path)));
+      console.log("UPLOADED file_id:", id);
+      break;
+    }
     default:
       console.log(
-        "Usage: npm start -- <chat|chat-followup|chat-stream|structured|tools|image|image-stream>"
+        "Usage: npm start -- <chat|chat-followup|chat-stream|structured|tools|image|image-stream|resp-image|resp-image-edit <id> <prompt>|resp-image-stream|studio|vision|vision-generate|upload-vision <path>>"
       );
   }
 }
