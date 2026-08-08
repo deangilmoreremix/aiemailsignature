@@ -25,6 +25,12 @@ import {
   analyzeThenGenerate,
   visionGuidedEdit,
 } from "./conversation.js";
+import {
+  editViaText,
+  editWithReferences,
+  inpaint as inpaintContent,
+  editViaTextResponses,
+} from "./image-editing.js";
 
 type Cmd = string | undefined;
 

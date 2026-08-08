@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>gpt-image-2 Studio</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">🎨 gpt-image-2 Studio</div>
+      <div class="sub">Responses API + gpt-image-2 v2 Image API · no mock data</div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="generate" class="active">Generate</button>
+      <button data-tab="stream">Live Stream</button>
+      <button data-tab="edit">Edit via Text</button>
+      <button data-tab="references">Reference Edit</button>
+      <button data-tab="inpaint">Inpaint (Mask)</button>
+      <button data-tab="vision">Vision Edit</button>
+      <button data-tab="analyze">Analyze</button>
+      <button data-tab="studio">Studio (Agent)</button>
+      <button data-tab="batch">Batch</button>
+    </nav>
+
+    <main>
+      <!-- GENERATE -->
+      <section class="panel active" id="generate">
+        <h2>Generate (text → image)</h2>
+        <textarea id="gen-prompt" placeholder="A serene mountain lake at sunrise, photorealistic."></textarea>
+        <div class="grid">
+          <label>Size<select id="gen-size"><option>auto</option><option>1024x1024</option><option>1536x1024</option><option>1024x1536</option></select></label>
+          <label>Quality<select id="gen-quality"><option>auto</option><option>low</option><option>medium</option><option>high</option></select></label>
+          <label>Format<select id="gen-format"><option>png</option><option>jpeg</option><option>webp</option></select></label>
+          <label>Background<select id="gen-bg"><option>auto</option><option>transparent</option><option>opaque</option></select></label>
+          <label># Images<input id="gen-n" type="number" min="1" max="4" value="1" /></label>
+        </div>
+        <button id="gen-run">Generate</button>
+        <div class="results" id="gen-res"></div>
+      </section>
+
+      <!-- LIVE STREAM -->
+      <section class="panel" id="stream">
+        <h2>Live Stream (partial images)</h2>
+        <textarea id="str-prompt" placeholder="Draw a river made of white owl feathers..."></textarea>
+        <button id="str-run">Start Streaming</button>
+        <div class="results" id="str-res"></div>
+      </section>
+
+      <!-- EDIT VIA TEXT -->
+      <section class="panel" id="edit">
+        <h2>Edit via Text</h2>
+        <div class="picker" data-for="edit-img"></div>
+        <textarea id="edit-prompt" placeholder="Make the background a warm sunset."></textarea>
+        <button id="edit-run">Edit Image</button>
+        <div class="results" id="edit-res"></div>
+      </section>
+
+      <!-- REFERENCE EDIT -->
+      <section class="panel" id="references">
+        <h2>Edit with Reference Images</h2>
+        <p class="hint">Provide a base image and one or more reference images.</p>
+        <div class="picker" data-for="ref-base"></div>
+        <div id="ref-list"></div>
+        <button id="ref-add">+ Add reference</button>
+        <textarea id="ref-prompt" placeholder="Combine these products into a gift basket on a white background."></textarea>
+        <button id="ref-run">Generate from References</button>
+        <div class="results" id="ref-res"></div>
+      </section>
+
+      <!-- INPAINT -->
+      <section class="panel" id="inpaint">
+        <h2>Inpaint with Mask</h2>
+        <div class="picker" data-for="inp-img"></div>
+        <div class="picker" data-for="inp-mask"></div>
+        <textarea id="inp-prompt" placeholder="Put a flamingo in the pool."></textarea>
+        <button id="inp-run">Inpaint</button>
+        <div class="results" id="inp-res"></div>
+      </section>
+
+      <!-- VISION EDIT -->
+      <section class="panel" id="vision">
+        <h2>Vision-Guided Edit</h2>
+        <p class="hint">The model looks at the image (vision), then drives gpt-image-2 to edit it.</p>
+        <div class="picker" data-for="vis-img"></div>
+        <textarea id="vis-prompt" placeholder="Make it look like a 1980s movie poster."></textarea>
+        <button id="vis-run">Vision Edit</button>
+        <div class="results" id="vis-res"></div>
+      </section>
+
+      <!-- ANALYZE -->
+      <section class="panel" id="analyze">
+        <h2>Analyze (Vision)</h2>
+        <div class="picker" data-for="ana-img"></div>
+        <textarea id="ana-q" placeholder="What is in this image?">What is in this image?</textarea>
+        <button id="ana-run">Analyze</button>
+        <div class="results" id="ana-res"></div>
+      </section>
+
+      <!-- STUDIO -->
+      <section class="panel" id="studio">
+        <h2>Studio (Responses API + gpt-image-2 agent)</h2>
+        <textarea id="studio-in" placeholder="Generate a cozy reading nook, then make it a sci-fi spaceship lounge."></textarea>
+        <button id="studio-run">Run</button>
+        <div class="results" id="studio-res"></div>
+      </section>
+
+      <!-- BATCH -->
+      <section class="panel" id="batch">
+        <h2>Batch Generation</h2>
+        <p class="hint">One prompt per line. Submitted as a batch job to /v1/images/generations.</p>
+        <textarea id="batch-prompts" placeholder="A cat in a hat.&#10;A dog on a boat.&#10;A fox in the snow."></textarea>
+        <button id="batch-run">Submit Batch</button>
+        <div class="results" id="batch-res"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
