@@ -1,21 +1,92 @@
+import OpenAI from "openai";
 import { openai, RESPONSES_MODEL } from "./openai.js";
 
-export interface ResponseOptions {
+/** A chat/text response from the model. */
+export interface ResponseResult {
+  text: string;
+  responseId: string;
+  usage?: OpenAI.Responses.ResponseUsage;
+}
+
+export interface BaseResponseOptions {
   model?: string;
   instructions?: string;
   temperature?: number;
+  topP?: number;
   maxOutputTokens?: number;
+  store?: boolean;
+  truncation?: "auto" | "disabled";
+  metadata?: Record<string, string>;
+}
+
+function collectText(response: OpenAI.Responses.Response): string {
+  return response.output
+    .filter((item): item is OpenAI.Responses.ResponseOutputMessage =>
+      item.type === "message"
+    )
+    .flatMap((item) =>
+      item.content
+        .filter((c) => c.type === "output_text")
+        .map((c) => (c as OpenAI.Responses.ResponseOutputText).text)
+    )
+    .join("\n")
+    .trim();
 }
 
 /**
- * Calls the OpenAI Responses API (POST /v1/responses) with the given user input.
- * This is the real Responses API, not chat completions and not mocked.
+ * Responses API — single text response.
+ * POST /v1/responses with a plain string `input`.
  */
 export async function createResponse(
   input: string,
-  options: ResponseOptions = {}
-): Promise<string> {
+  options: BaseResponseOptions = {}
+): Promise<ResponseResult> {
   const response = await openai.responses.create({
+    model: options.model ?? RESPONSES_MODEL,
+    input,
+    instructions: options.instructions,
+    temperature: options.temperature,
+    top_p: options.topP,
+    max_output_tokens: options.maxOutputTokens,
+    store: options.store,
+    truncation: options.truncation,
+    metadata: options.metadata,
+  });
+
+  return { text: collectText(response), responseId: response.id, usage: response.usage };
+}
+
+/**
+ * Responses API — multi-turn conversation.
+ * Uses `previous_response_id` so the model keeps state server-side.
+ */
+export async function continueResponse(
+  input: string,
+  previousResponseId: string,
+  options: BaseResponseOptions = {}
+): Promise<ResponseResult> {
+  const response = await openai.responses.create({
+    model: options.model ?? RESPONSES_MODEL,
+    input,
+    previous_response_id: previousResponseId,
+    instructions: options.instructions,
+    temperature: options.temperature,
+    max_output_tokens: options.maxOutputTokens,
+  });
+
+  return { text: collectText(response), responseId: response.id, usage: response.usage };
+}
+
+/**
+ * Responses API — streamed text response.
+ * Emits incremental text deltas via `onDelta`, resolves with the full text.
+ */
+export async function streamResponse(
+  input: string,
+  onDelta: (delta: string) => void,
+  options: BaseResponseOptions = {}
+): Promise<ResponseResult> {
+  const stream = await openai.responses.stream({
     model: options.model ?? RESPONSES_MODEL,
     input,
     instructions: options.instructions,
@@ -23,45 +94,163 @@ export async function createResponse(
     max_output_tokens: options.maxOutputTokens,
   });
 
-  // The Responses API returns an array of output items; collect text from
-  // message outputs. This never returns fabricated content.
-  const texts = response.output
-    .filter((item) => item.type === "message")
-    .flatMap((item) =>
-      item.content
-        .filter((c) => c.type === "output_text")
-        .map((c) => (c as { text: string }).text)
-    );
+  let full = "";
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta") {
+      full += event.delta;
+      onDelta(event.delta);
+    }
+  }
 
-  return texts.join("\n").trim();
+  const final = await stream.finalResponse();
+  return { text: full.trim() || collectText(final), responseId: final.id, usage: final.usage };
 }
 
 /**
- * Multi-turn conversation using the Responses API with previous_response_id
- * to maintain session state server-side.
+ * Responses API — Structured Outputs (JSON Schema).
+ * Guarantees the model returns JSON that validates against `schema`.
  */
-export async function continueResponse(
+export async function createStructuredResponse<T = unknown>(
   input: string,
-  previousResponseId: string,
-  options: ResponseOptions = {}
-): Promise<{ text: string; responseId: string }> {
+  schema: Record<string, unknown>,
+  options: BaseResponseOptions & { schemaName?: string; strict?: boolean } = {}
+): Promise<T> {
   const response = await openai.responses.create({
     model: options.model ?? RESPONSES_MODEL,
     input,
-    previous_response_id: previousResponseId,
     instructions: options.instructions,
     temperature: options.temperature,
+    max_output_tokens: options.maxOutputTokens,
+    text: {
+      format: {
+        type: "json_schema",
+        name: options.schemaName ?? "structured_result",
+        schema,
+        strict: options.strict ?? true,
+      },
+    },
   });
 
-  const text = response.output
-    .filter((item) => item.type === "message")
-    .flatMap((item) =>
-      item.content
-        .filter((c) => c.type === "output_text")
-        .map((c) => (c as { text: string }).text)
-    )
-    .join("\n")
-    .trim();
+  const text = collectText(response);
+  return JSON.parse(text) as T;
+}
 
-  return { text, responseId: response.id };
+/** A function tool the model can call. */
+export interface FunctionTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  strict?: boolean;
+  handler: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+}
+
+/**
+ * Responses API — tool / function calling (agentic loop).
+ * Built-in tools (e.g. web search) can be passed via `builtInTools`.
+ * Function tools are executed locally and their outputs fed back until the
+ * model produces a final answer.
+ */
+export async function runWithFunctions(
+  input: string,
+  tools: FunctionTool[],
+  options: BaseResponseOptions & { builtInTools?: OpenAI.Responses.Tool[] } = {}
+): Promise<ResponseResult> {
+  const functionDefs: OpenAI.Responses.Tool[] = tools.map((t) => ({
+    type: "function",
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters,
+    strict: t.strict ?? true,
+  }));
+
+  const allTools = [...functionDefs, ...(options.builtInTools ?? [])];
+
+  // First call uses the user's text input.
+  let response = await openai.responses.create({
+    model: options.model ?? RESPONSES_MODEL,
+    input,
+    instructions: options.instructions,
+    temperature: options.temperature,
+    max_output_tokens: options.maxOutputTokens,
+    tools: allTools,
+  });
+
+  // Up to 5 round-trips of function calls.
+  for (let turn = 0; turn < 5; turn++) {
+    const calls = response.output.filter(
+      (item) => item.type === "function_call"
+    ) as OpenAI.Responses.ResponseFunctionToolCall[];
+
+    if (calls.length === 0) {
+      return {
+        text: collectText(response),
+        responseId: response.id,
+        usage: response.usage,
+      };
+    }
+
+    // Execute each function call and append its output as a follow-up item.
+    const outputs: OpenAI.Responses.ResponseInputItem.FunctionCallOutput[] =
+      await Promise.all(
+        calls.map(async (call) => {
+          const fn = tools.find((t) => t.name === call.name);
+          const args = call.arguments ? JSON.parse(call.arguments) : {};
+          const result = fn ? await fn.handler(args) : null;
+          return {
+            type: "function_call_output" as const,
+            call_id: call.call_id,
+            output: JSON.stringify(result ?? null),
+          };
+        })
+      );
+
+    response = await openai.responses.create({
+      model: options.model ?? RESPONSES_MODEL,
+      previous_response_id: response.id,
+      input: outputs,
+    });
+  }
+
+  throw new Error("Exceeded maximum function-calling turns (5).");
+}
+
+/** An image supplied to the model as input. */
+export type ImageInput =
+  | { url: string }
+  | { base64: string; mediaType?: string }
+  | { fileId: string };
+
+function toInputImage(img: ImageInput): OpenAI.Responses.ResponseInputImage {
+  if ("url" in img)
+    return { type: "input_image", image_url: img.url, detail: "auto" };
+  if ("fileId" in img)
+    return { type: "input_image", file_id: img.fileId, detail: "auto" };
+  const dataUrl = `data:${img.mediaType ?? "image/png"};base64,${img.base64}`;
+  return { type: "input_image", image_url: dataUrl, detail: "auto" };
+}
+
+/**
+ * Responses API — multimodal input (text + one or more images).
+ * Lets the model reason about images you provide via URL, base64, or file ID.
+ */
+export async function createResponseWithImage(
+  text: string,
+  images: ImageInput | ImageInput[],
+  options: BaseResponseOptions = {}
+): Promise<ResponseResult> {
+  const list = Array.isArray(images) ? images : [images];
+  const content: OpenAI.Responses.ResponseInputMessageContentList = [
+    { type: "input_text", text },
+    ...list.map(toInputImage),
+  ];
+
+  const response = await openai.responses.create({
+    model: options.model ?? RESPONSES_MODEL,
+    input: [{ role: "user", content }],
+    instructions: options.instructions,
+    temperature: options.temperature,
+    max_output_tokens: options.maxOutputTokens,
+  });
+
+  return { text: collectText(response), responseId: response.id, usage: response.usage };
 }
