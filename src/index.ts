@@ -8,6 +8,7 @@ import {
   createResponseWithImage,
   analyzeImage,
   uploadVisionImage,
+  streamAnalyzeImage,
 } from "./responses.js";
 import {
   generateImage,
@@ -22,6 +23,7 @@ import {
   streamImageViaResponses,
   runImageStudio,
   analyzeThenGenerate,
+  visionGuidedEdit,
 } from "./conversation.js";
 
 type Cmd = string | undefined;
@@ -158,9 +160,29 @@ async function main() {
       console.log("UPLOADED file_id:", id);
       break;
     }
+    case "vision-stream": {
+      process.stdout.write("STREAM: ");
+      const res = await streamAnalyzeImage(
+        "What is happening in this image, step by step?",
+        { url: "https://api.nga.gov/iiif/a2e6da57-3cd1-4235-b20e-95dcaefed6c8/full/!800,800/0/default.jpg", detail: "high" },
+        (d) => process.stdout.write(d)
+      );
+      console.log("\nDONE:", res.responseId);
+      break;
+    }
+    case "vision-edit": {
+      const [_, url, prompt] = process.argv.slice(2);
+      const edited = await visionGuidedEdit(
+        { url: url ?? "https://api.nga.gov/iiif/a2e6da57-3cd1-4235-b20e-95dcaefed6c8/full/!800,800/0/default.jpg" },
+        prompt ?? "Make the background a warm sunset."
+      );
+      if (edited[0]?.b64Json) writeFileSync("vision-edit.png", Buffer.from(edited[0].b64Json, "base64"));
+      console.log("VISION-GUIDED EDIT:", edited.length, "image(s)");
+      break;
+    }
     default:
       console.log(
-        "Usage: npm start -- <chat|chat-followup|chat-stream|structured|tools|image|image-stream|resp-image|resp-image-edit <id> <prompt>|resp-image-stream|studio|vision|vision-generate|upload-vision <path>>"
+        "Usage: npm start -- <chat|chat-followup|chat-stream|structured|tools|image|image-stream|resp-image|resp-image-edit <id> <prompt>|resp-image-stream|studio|vision|vision-generate|upload-vision <path>|vision-stream|vision-edit [url] [prompt]>"
       );
   }
 }

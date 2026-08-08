@@ -273,6 +273,57 @@ export async function analyzeImage(
   return res.text;
 }
 
+/**
+ * Responses API — streamed multimodal input (text + one or more images).
+ * Same vision capabilities as `createResponseWithImage`, but emits incremental
+ * text deltas via `onDelta` and resolves with the full text once complete.
+ * Per-image `detail` ("low" | "high" | "auto") controls fidelity/cost.
+ */
+export async function streamResponseWithImage(
+  text: string,
+  images: ImageInput | ImageInput[],
+  onDelta: (delta: string) => void,
+  options: BaseResponseOptions = {}
+): Promise<ResponseResult> {
+  const list = Array.isArray(images) ? images : [images];
+  const content: OpenAI.Responses.ResponseInputMessageContentList = [
+    { type: "input_text", text },
+    ...list.map(toInputImage),
+  ];
+
+  const stream = await openai.responses.stream({
+    model: options.model ?? RESPONSES_MODEL,
+    input: [{ role: "user", content }],
+    instructions: options.instructions,
+    temperature: options.temperature,
+    max_output_tokens: options.maxOutputTokens,
+  });
+
+  let full = "";
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta") {
+      full += event.delta;
+      onDelta(event.delta);
+    }
+  }
+
+  const final = await stream.finalResponse();
+  return { text: full.trim() || collectText(final), responseId: final.id, usage: final.usage };
+}
+
+/**
+ * Convenience wrapper: ask the model a question about one or more images and
+ * stream the answer back token-by-token.
+ */
+export async function streamAnalyzeImage(
+  question: string,
+  images: ImageInput | ImageInput[],
+  onDelta: (delta: string) => void,
+  options: BaseResponseOptions = {}
+): Promise<ResponseResult> {
+  return streamResponseWithImage(question, images, onDelta, options);
+}
+
 /** Upload an image to the Files API (purpose: vision) and return its file ID. */
 export async function uploadVisionImage(
   source: File | Blob | Buffer,

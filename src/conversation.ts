@@ -207,3 +207,52 @@ export async function analyzeThenGenerate(
   const generated = await generateImage(genPrompt ?? description);
   return { description, image: generated };
 }
+
+/**
+ * Resolve any `ImageInput` (base64 / URL / Files API id) to raw image bytes.
+ * Needed because the Responses API accepts images by reference, while the
+ * Image API (`/v1/images/edits`) needs the actual file upload.
+ */
+export async function imageInputToBytes(image: ImageInput): Promise<Buffer> {
+  if ("base64" in image) {
+    return Buffer.from(image.base64, "base64");
+  }
+
+  if ("url" in image) {
+    const res = await fetch(image.url);
+    if (!res.ok) throw new Error("Failed to fetch image: " + res.status);
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  const fr = await openai.files.content(image.fileId);
+  return Buffer.from(await fr.arrayBuffer());
+}
+
+/**
+ * ENHANCEMENT: vision-guided editing ("Images and vision" guide).
+ * 1. The model actually LOOKS at the image with the Responses API (vision) and
+ *    describes it.
+ * 2. That description is prepended to the user's instruction so gpt-image-2
+ *    edits the same image with real context about what is in it.
+ * Returns every image gpt-image-2 produced (use `result[0]` for a single one).
+ */
+export async function visionGuidedEdit(
+  image: ImageInput,
+  editPrompt: string,
+  options: ImageGenToolOptions = {}
+): Promise<import("./images.js").GeneratedImage[]> {
+  const bytes = await imageInputToBytes(image);
+  const file = new File([bytes as BlobPart], "image.png", { type: "image/png" });
+
+  // Real vision call: understand the image before editing it.
+  const description = await analyzeImage(
+    "Briefly describe this image for editing context.",
+    image
+  );
+
+  const effectivePrompt = description
+    ? `Source image description: ${description}\n\nEdit instruction: ${editPrompt}`
+    : editPrompt;
+
+  return editImage(effectivePrompt, file, options);
+}
