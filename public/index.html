@@ -22,6 +22,12 @@
       <button data-tab="analyze">Analyze</button>
       <button data-tab="studio">Studio (Agent)</button>
       <button data-tab="batch">Batch</button>
+      <button data-tab="web-search">Web Search</button>
+      <button data-tab="file-search">File Search</button>
+      <button data-tab="code">Code</button>
+      <button data-tab="reason">Reason</button>
+      <button data-tab="background">Background</button>
+      <button data-tab="audio">Audio</button>
     </nav>
 
     <main>
@@ -113,6 +119,52 @@
         <textarea id="batch-prompts" placeholder="A cat in a hat.&#10;A dog on a boat.&#10;A fox in the snow."></textarea>
         <button id="batch-run">Submit Batch</button>
         <div class="results" id="batch-res"></div>
+      </section>
+
+      <section class="panel" id="web-search">
+        <h2>Web Search (built-in tool)</h2>
+        <textarea id="ws-prompt" placeholder="What are the latest developments in fusion energy?"></textarea>
+        <button id="ws-run">Search</button>
+        <div class="results" id="ws-res"></div>
+      </section>
+
+      <section class="panel" id="file-search">
+        <h2>File Search / RAG (built-in tool)</h2>
+        <p class="hint">Provide a vector store id (create one via the API / CLI).</p>
+        <input id="fs-vs" placeholder="vector store id" />
+        <textarea id="fs-prompt" placeholder="Summarize the uploaded document."></textarea>
+        <button id="fs-run">Search Files</button>
+        <div class="results" id="fs-res"></div>
+      </section>
+
+      <section class="panel" id="code">
+        <h2>Code Interpreter (built-in tool)</h2>
+        <textarea id="code-prompt" placeholder="Compute the first 10 Fibonacci numbers and plot them."></textarea>
+        <button id="code-run">Run</button>
+        <div class="results" id="code-res"></div>
+      </section>
+
+      <section class="panel" id="reason">
+        <h2>Reasoning</h2>
+        <label>Effort<select id="reason-effort"><option>low</option><option>medium</option><option>high</option></select></label>
+        <label>Summary<select id="reason-summary"><option>auto</option><option>concise</option><option>detailed</option></select></label>
+        <textarea id="reason-prompt" placeholder="Solve a multi-step logic puzzle."></textarea>
+        <button id="reason-run">Reason</button>
+        <div class="results" id="reason-res"></div>
+      </section>
+
+      <section class="panel" id="background">
+        <h2>Background (async) Response</h2>
+        <textarea id="bg-prompt" placeholder="Write a long research brief."></textarea>
+        <button id="bg-run">Submit (background)</button>
+        <div class="results" id="bg-res"></div>
+      </section>
+
+      <section class="panel" id="audio">
+        <h2>Audio Output</h2>
+        <textarea id="audio-prompt" placeholder="Read a short poem about the ocean."></textarea>
+        <button id="audio-run">Generate</button>
+        <div class="results" id="audio-res"></div>
       </section>
     </main>
 

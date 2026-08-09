@@ -11,6 +11,22 @@ import {
 } from "./conversation.js";
 import { analyzeImage, type ImageInput } from "./responses.js";
 import { editViaText, editWithReferences, inpaint, type ImageContent as EditContent } from "./image-editing.js";
+import {
+  webSearch,
+  fileSearch,
+  codeInterpreter,
+  createVectorStore,
+  uploadFileForSearch,
+  addFileToVectorStore,
+} from "./responses-tools.js";
+import {
+  createResponseWithReasoning,
+  createResponseBackground,
+  getResponse,
+  waitForResponse,
+  deleteResponse,
+  createResponseWithAudioOutput,
+} from "./responses-advanced.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -135,6 +151,47 @@ app.post("/api/responses-stream", async (req, res) => {
   } finally {
     res.end();
   }
+});
+
+// ---- Responses API built-in tools & advanced features ----
+app.post("/api/web-search", async (req, res) => {
+  const r = await webSearch(req.body.prompt, { searchContextSize: req.body.searchContextSize, userLocation: req.body.userLocation });
+  res.json(r);
+});
+
+app.post("/api/file-search", async (req, res) => {
+  const r = await fileSearch(req.body.prompt, req.body.vectorStoreIds ?? [], { maxNumResults: req.body.maxNumResults, filters: req.body.filters });
+  res.json(r);
+});
+
+app.post("/api/code", async (req, res) => {
+  const r = await codeInterpreter(req.body.prompt);
+  res.json(r);
+});
+
+app.post("/api/reason", async (req, res) => {
+  const r = await createResponseWithReasoning(req.body.prompt, { effort: req.body.effort, summary: req.body.summary });
+  res.json(r);
+});
+
+app.post("/api/background", async (req, res) => {
+  const r = await createResponseBackground(req.body.prompt);
+  res.json(r);
+});
+
+app.get("/api/responses/:id", async (req, res) => {
+  const r = await waitForResponse(req.params.id);
+  res.json({ id: r.id, status: r.status, text: r.output_text });
+});
+
+app.delete("/api/responses/:id", async (req, res) => {
+  await deleteResponse(req.params.id);
+  res.json({ deleted: req.params.id });
+});
+
+app.post("/api/audio", async (req, res) => {
+  const r = await createResponseWithAudioOutput(req.body.prompt, { voice: req.body.voice });
+  res.json(r);
 });
 
 app.use(express.static(join(process.cwd(), "public")));

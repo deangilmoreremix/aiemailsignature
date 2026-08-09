@@ -31,6 +31,18 @@ import {
   inpaint as inpaintContent,
   editViaTextResponses,
 } from "./image-editing.js";
+import {
+  webSearch,
+  fileSearch,
+  codeInterpreter,
+} from "./responses-tools.js";
+import {
+  createResponseWithReasoning,
+  createResponseBackground,
+  waitForResponse,
+  deleteResponse,
+  createResponseWithAudioOutput,
+} from "./responses-advanced.js";
 
 type Cmd = string | undefined;
 
@@ -186,9 +198,53 @@ async function main() {
       console.log("VISION-GUIDED EDIT:", edited.length, "image(s)");
       break;
     }
+    case "web-search": {
+      const r = await webSearch(process.argv[3] ?? "What is the latest news about renewable energy?");
+      console.log("WEB SEARCH:\n", r.text, "\nSOURCES:", JSON.stringify(r.annotations));
+      break;
+    }
+    case "file-search": {
+      const [_, prompt, vsId] = process.argv.slice(2);
+      const r = await fileSearch(prompt ?? "Summarize the document.", [vsId].filter(Boolean) as string[]);
+      console.log("FILE SEARCH:\n", r.text);
+      break;
+    }
+    case "code": {
+      const r = await codeInterpreter(process.argv[3] ?? "Plot a sine wave and return the code.");
+      console.log("CODE INTERPRETER:\nCODE:", r.code.join("\n"), "\nRESULTS:", r.results.join("\n"), "\nTEXT:", r.text);
+      break;
+    }
+    case "reason": {
+      const r = await createResponseWithReasoning(process.argv[3] ?? "Solve: if a train travels 60mph for 2.5h, how far?", {
+        effort: "medium",
+        summary: "auto",
+      });
+      console.log("REASONING SUMMARY:", r.reasoningSummary, "\nANSWER:", r.text);
+      break;
+    }
+    case "background": {
+      const r = await createResponseBackground(process.argv[3] ?? "Write a detailed 3-paragraph history of coffee.");
+      console.log("BACKGROUND SUBMITTED:", r.id, r.status);
+      break;
+    }
+    case "response-get": {
+      const r = await waitForResponse(process.argv[3] ?? "");
+      console.log("RESPONSE:", r.status, "\n", r.output_text);
+      break;
+    }
+    case "response-del": {
+      await deleteResponse(process.argv[3] ?? "");
+      console.log("DELETED", process.argv[3]);
+      break;
+    }
+    case "audio": {
+      const r = await createResponseWithAudioOutput(process.argv[3] ?? "Read a short poem about the ocean.");
+      console.log("AUDIO id:", r.audio?.id, "\nTRANSCRIPT:", r.audio?.transcript, "\nTEXT:", r.text);
+      break;
+    }
     default:
       console.log(
-        "Usage: npm start -- <chat|chat-followup|chat-stream|structured|tools|image|image-stream|resp-image|resp-image-edit <id> <prompt>|resp-image-stream|studio|vision|vision-generate|upload-vision <path>|vision-stream|vision-edit [url] [prompt]>"
+        "Usage: npm start -- <chat|chat-followup|chat-stream|structured|tools|image|image-stream|resp-image|resp-image-edit <id> <prompt>|resp-image-stream|studio|vision|vision-generate|upload-vision <path>|vision-stream|vision-edit [url] [prompt]|web-search [q]|file-search <prompt> <vsId>|code [q]|reason [q]|background [q]|response-get <id>|response-del <id>|audio [q]>"
       );
   }
 }

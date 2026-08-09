@@ -288,3 +288,85 @@ $("#batch-run").onclick = async () => {
     setStatus(res, e.message, true);
   }
 };
+
+// ---------- Web Search ----------
+$("#ws-run").onclick = async () => {
+  const res = $("#ws-res");
+  setStatus(res, "Searching the web…");
+  try {
+    const data = await apiPost("/api/web-search", { prompt: $("#ws-prompt").value });
+    res.innerHTML = "";
+    const c = document.createElement("div");
+    c.className = "card";
+    c.innerHTML = `<div class="meta">${data.text.replace(/</g, "&lt;")}</div>` +
+      (data.annotations?.length ? `<div class="meta">Sources: ${data.annotations.map((a) => `<a href="${a.url}" target="_blank">${a.title || a.url}</a>`).join(" · ")}</div>` : "");
+    res.appendChild(c);
+  } catch (e) {
+    setStatus(res, e.message, true);
+  }
+};
+
+// ---------- File Search ----------
+$("#fs-run").onclick = async () => {
+  const res = $("#fs-res");
+  setStatus(res, "Searching files…");
+  try {
+    const data = await apiPost("/api/file-search", { prompt: $("#fs-prompt").value, vectorStoreIds: [$("#fs-vs").value].filter(Boolean) });
+    setStatus(res, data.text);
+  } catch (e) {
+    setStatus(res, e.message, true);
+  }
+};
+
+// ---------- Code Interpreter ----------
+$("#code-run").onclick = async () => {
+  const res = $("#code-res");
+  setStatus(res, "Running code…");
+  try {
+    const data = await apiPost("/api/code", { prompt: $("#code-prompt").value });
+    setStatus(res, `Code:\n${data.code.join("\n")}\n\nResults:\n${data.results.join("\n")}\n\n${data.text}`);
+  } catch (e) {
+    setStatus(res, e.message, true);
+  }
+};
+
+// ---------- Reasoning ----------
+$("#reason-run").onclick = async () => {
+  const res = $("#reason-res");
+  setStatus(res, "Reasoning…");
+  try {
+    const data = await apiPost("/api/reason", {
+      prompt: $("#reason-prompt").value,
+      effort: $("#reason-effort").value,
+      summary: $("#reason-summary").value,
+    });
+    setStatus(res, `Summary: ${(data.reasoningSummary || []).join(" ")}\n\n${data.text}`);
+  } catch (e) {
+    setStatus(res, e.message, true);
+  }
+};
+
+// ---------- Background ----------
+$("#bg-run").onclick = async () => {
+  const res = $("#bg-res");
+  setStatus(res, "Submitting background response…");
+  try {
+    const data = await apiPost("/api/background", { prompt: $("#bg-prompt").value });
+    setStatus(res, `Submitted: ${data.id} (${data.status}). Poll: GET /api/responses/${data.id}`);
+  } catch (e) {
+    setStatus(res, e.message, true);
+  }
+};
+
+// ---------- Audio ----------
+$("#audio-run").onclick = async () => {
+  const res = $("#audio-res");
+  setStatus(res, "Generating audio…");
+  try {
+    const data = await apiPost("/api/audio", { prompt: $("#audio-prompt").value });
+    const a = data.audio || {};
+    setStatus(res, `Transcript: ${a.transcript || ""}\nText: ${data.text}${a.data ? "\n(Audio base64 returned)" : ""}`);
+  } catch (e) {
+    setStatus(res, e.message, true);
+  }
+};
