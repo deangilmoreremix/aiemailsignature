@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, audit and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (TypeScript type-check)
+        run: npm run build
+
+      - name: Audit (verify real APIs, no mock data)
+        run: npm run audit
+
+      # OPENAI_API_KEY is deliberately NOT provided to CI: the integration
+      # suite skips itself without a real key, so the run stays green while
+      # never exercising fake data or recorded responses.
+      - name: Test
+        run: npm test

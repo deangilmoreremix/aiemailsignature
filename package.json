@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node --loader ts-node/esm src/index.ts",
     "ui": "tsx src/server.ts",
+    "test": "vitest run",
     "audit": "node audit/check.mjs"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^3.2.4"
   }
 }
