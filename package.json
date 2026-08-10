@@ -1,6 +1,9 @@
 {
   "name": "openai-real-api-app",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=18"
+  },
   "private": true,
   "type": "module",
   "description": "Application using the OpenAI Responses API and gpt-image-2 image generation. No mock data.",

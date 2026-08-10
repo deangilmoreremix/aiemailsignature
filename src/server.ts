@@ -33,13 +33,13 @@ const app = express();
 app.use(express.json({ limit: "30mb" }));
 
 /** Accept a data URL or http(s) URL from the UI and map to an ImageContent. */
-function toContent(src: unknown): EditContent {
+export function toContent(src: unknown): EditContent {
   if (typeof src !== "string" || !src) throw new Error("image source must be a data URL or http(s) URL");
   if (src.startsWith("http://") || src.startsWith("https://")) return { kind: "url", url: src };
   return { kind: "dataUrl", url: src };
 }
 
-function optsFrom(body: Record<string, unknown>): ImageGenOptions {
+export function optsFrom(body: Record<string, unknown>): ImageGenOptions {
   const o: ImageGenOptions = {};
   if (body.size) o.size = body.size as ImageGenOptions["size"];
   if (body.quality) o.quality = body.quality as ImageGenOptions["quality"];
@@ -50,7 +50,7 @@ function optsFrom(body: Record<string, unknown>): ImageGenOptions {
   return o;
 }
 
-function withDataUrl(img: { b64Json?: string; url?: string; revisedPrompt?: string }) {
+export function withDataUrl(img: { b64Json?: string; url?: string; revisedPrompt?: string }) {
   return {
     b64Json: img.b64Json,
     url: img.url,
