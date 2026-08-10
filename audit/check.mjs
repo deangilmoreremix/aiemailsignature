@@ -4,9 +4,9 @@
  * Run with: node audit/check.mjs
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, extname } from "node:path";
+import { join, extname, sep } from "node:path";
 
-const ROOTS = ["src", "audit"];
+const ROOTS = ["src", "audit", "tests"];
 const PROHIBITED = [
   [/\b(mock|fake|dummy|fixture|placeholder)[A-Za-z0-9_]/i, "mock identifier"],
   [/__mocks__/i, "__mocks__ dir"],
@@ -31,14 +31,26 @@ function walk(dir, files = []) {
   return files;
 }
 
-// Only scan the application source for mock data. The audit scripts
-// (this file, check.ts) intentionally mention those words and are excluded.
-const sources = [];
-try {
-  sources.push(...walk("src"));
-} catch {
-  console.warn("(audit) directory not found: src");
+// Scan the application source AND the test suite for mock data: tests must be
+// just as mock-free as the app. The audit scripts themselves (this file) are
+// walked for completeness but skipped by the prohibited scan, because they
+// necessarily spell out the very words they search for.
+const SELF_ROOT = "audit";
+
+function collect(roots) {
+  const files = [];
+  for (const root of roots) {
+    try {
+      files.push(...walk(root));
+    } catch {
+      console.warn(`(audit) directory not found: ${root}`);
+    }
+  }
+  return files;
 }
+
+const sources = collect(ROOTS);
+const scanned = sources.filter((f) => f.split(sep)[0] !== SELF_ROOT);
 
 function stripComments(code) {
   return code
@@ -55,7 +67,7 @@ function stripStrings(code) {
 
 let failures = 0;
 
-for (const file of sources) {
+for (const file of scanned) {
   const content = stripStrings(stripComments(readFileSync(file, "utf8")));
   for (const [re, label] of PROHIBITED) {
     const m = content.match(re);
@@ -65,8 +77,17 @@ for (const file of sources) {
     }
   }
 }
+console.log(
+  `OK    Scanned ${scanned.length} file(s) for mock data across: ${ROOTS.filter(
+    (r) => r !== SELF_ROOT
+  ).join(", ")}`
+);
 
-const all = sources.map((f) => readFileSync(f, "utf8")).join("\n");
+// Required real-API usage is asserted against the application source only, so
+// that a mention in the tests or in this audit script can never satisfy it.
+const all = collect(["src"])
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n");
 
 for (const [re, label] of REQUIRED_API_PATTERNS) {
   if (!re.test(all)) {

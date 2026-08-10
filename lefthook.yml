@@ -1,0 +1,10 @@
+# Git hooks managed by lefthook (installed via the `prepare` npm script).
+# Keep pre-commit minimal and fast: the static no-mock audit is the core
+# guarantee that the codebase always talks to the REAL OpenAI API.
+# The full gate (build + audit + test) runs via `npm run verify` in CI.
+pre-commit:
+  parallel: false
+  commands:
+    audit:
+      run: npm run audit
+      fail_text: "No-mock audit failed — remove mock/fake data before committing."

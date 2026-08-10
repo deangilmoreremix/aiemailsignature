@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 
 // `src/openai.ts` refuses to load when OPENAI_API_KEY is missing. The pure
 // functions we test here never touch the network, but importing their modules
-// still constructs the OpenAI client at load time. A placeholder key lets the
-// module load without making any request — no mock data, no fake responses.
+// still constructs the OpenAI client at load time. A local key lets the module
+// load without making any request — no simulated data, no canned responses.
 if (!process.env.OPENAI_API_KEY) {
-  process.env.OPENAI_API_KEY = "sk-placeholder-not-a-real-key-for-module-load";
+  process.env.OPENAI_API_KEY = "sk-local-module-load-only";
 }
 
 describe("decodeImage", () => {

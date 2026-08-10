@@ -25,7 +25,11 @@ ENV NODE_ENV=development
 
 # Copy the manifests first so this layer stays cached until the lockfile moves.
 COPY package.json package-lock.json ./
-RUN npm ci
+
+# The `prepare` script installs the lefthook git hooks; there is no .git inside
+# the build context, so drop it for this layer only (dependencies are
+# untouched, the lockfile stays in sync and `npm ci` keeps working).
+RUN npm pkg delete scripts.prepare && npm ci
 
 # Copy the rest of the application sources.
 COPY tsconfig.json ./
